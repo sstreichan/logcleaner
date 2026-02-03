@@ -7,48 +7,162 @@ import (
 )
 
 type Autocomplete struct {
-	cache map[string][]string
+	cache        map[string][]string
+	lastMatches  []string
+	currentIndex int
 }
 
 func NewAutocomplete() *Autocomplete {
 	return &Autocomplete{
-		cache: make(map[string][]string),
+		cache:        make(map[string][]string),
+		lastMatches:  []string{},
+		currentIndex: 0,
 	}
 }
 
+// Complete returns the autocompleted path based on the current input
 func (a *Autocomplete) Complete(input string) string {
+	// Handle empty input - start with current directory
 	if input == "" {
-		return ""
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "./"
+		}
+		return cwd + string(filepath.Separator)
 	}
 
-	dir := filepath.Dir(input)
-	base := filepath.Base(input)
+	// Parse input into directory and base
+	dir, base := a.parseInput(input)
+
+	// Get all matching entries
+	matches := a.findMatches(dir, base)
+
+	if len(matches) == 0 {
+		return input
+	}
+
+	if len(matches) == 1 {
+		// Single match - return it
+		return matches[0]
+	}
+
+	// Multiple matches - return common prefix
+	commonPrefix := a.findCommonPrefix(matches)
+	if commonPrefix != input {
+		return commonPrefix
+	}
+
+	// No additional completion possible, return input
+	// Store matches for potential future use (e.g., showing suggestions)
+	a.lastMatches = matches
+	return input
+}
+
+// parseInput splits input into directory and base name, handling special cases
+func (a *Autocomplete) parseInput(input string) (string, string) {
+	var dir, base string
+
+	// Handle trailing separator (user is in a directory)
+	if strings.HasSuffix(input, string(filepath.Separator)) {
+		dir = input
+		base = ""
+	} else {
+		dir = filepath.Dir(input)
+		base = filepath.Base(input)
+	}
 
 	// Expand ~ to home directory
 	if strings.HasPrefix(dir, "~") {
-		home, _ := os.UserHomeDir()
-		dir = strings.Replace(dir, "~", home, 1)
+		home, err := os.UserHomeDir()
+		if err == nil {
+			if dir == "~" {
+				dir = home
+			} else {
+				dir = strings.Replace(dir, "~", home, 1)
+			}
+		}
 	}
 
+	// Handle relative paths
+	if dir == "." || dir == "" {
+		cwd, err := os.Getwd()
+		if err == nil {
+			dir = cwd
+		} else {
+			dir = "."
+		}
+	}
+
+	return dir, base
+}
+
+// findMatches returns all filesystem entries matching the base pattern in dir
+func (a *Autocomplete) findMatches(dir, base string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return input
+		return []string{}
 	}
 
 	var matches []string
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), base) {
+		// Skip hidden files unless user explicitly typed a dot
+		if !strings.HasPrefix(base, ".") && strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		// Check if entry matches the base
+		if base == "" || strings.HasPrefix(entry.Name(), base) {
 			fullPath := filepath.Join(dir, entry.Name())
+			
+			// Add trailing separator for directories
 			if entry.IsDir() {
 				fullPath += string(filepath.Separator)
 			}
+			
 			matches = append(matches, fullPath)
 		}
+	}
+
+	return matches
+}
+
+// findCommonPrefix returns the longest common prefix of all matches
+func (a *Autocomplete) findCommonPrefix(matches []string) string {
+	if len(matches) == 0 {
+		return ""
 	}
 
 	if len(matches) == 1 {
 		return matches[0]
 	}
 
-	return input
+	// Find common prefix
+	prefix := matches[0]
+	for _, match := range matches[1:] {
+		prefix = commonPrefix(prefix, match)
+	}
+
+	return prefix
+}
+
+// GetLastMatches returns the matches from the last completion attempt
+// Useful for displaying suggestions to the user
+func (a *Autocomplete) GetLastMatches() []string {
+	return a.lastMatches
+}
+
+// commonPrefix returns the common prefix of two strings
+func commonPrefix(a, b string) string {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+
+	for i := 0; i < minLen; i++ {
+		if a[i] != b[i] {
+			return a[:i]
+		}
+	}
+
+	return a[:minLen]
 }
