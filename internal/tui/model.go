@@ -112,6 +112,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Global quit keys
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+
+		// Route to appropriate screen handler
 		switch m.screen {
 		case screenFileSelect:
 			return m.updateFileSelect(msg)
@@ -124,22 +130,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Update file input for any other key that's not tab
-	if m.screen == screenFileSelect {
-		var cmd tea.Cmd
-		m.fileInput, cmd = m.fileInput.Update(msg)
-		return m, cmd
-	}
-
 	return m, nil
 }
 
 func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "q":
 		return m, tea.Quit
 
 	case "tab":
+		// Handle autocomplete cycling
 		currentValue := m.fileInput.Value()
 		completion := m.autocomplete.Complete(currentValue)
 		
@@ -150,28 +150,36 @@ func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
+		// Validate and move to next screen
 		if m.fileInput.Value() != "" {
 			if _, err := os.Stat(m.fileInput.Value()); err == nil {
 				m.filePath = m.fileInput.Value()
 				m.screen = screenFilterManage
-				// Reset autocomplete when moving to next screen
 				m.autocomplete.Reset()
 			}
 		}
 		return m, nil
 
 	default:
-		// Reset autocomplete when user types something
-		// This will be handled after the input is updated
+		// For all other keys, let textinput handle them
+		// But first, check if this is a typing key (not just navigation)
+		oldValue := m.fileInput.Value()
+		
+		var cmd tea.Cmd
+		m.fileInput, cmd = m.fileInput.Update(msg)
+		
+		// If the value changed, reset autocomplete
+		if m.fileInput.Value() != oldValue {
+			m.autocomplete.Reset()
+		}
+		
+		return m, cmd
 	}
-
-	// Don't update input here - it's done in the main Update function
-	return m, nil
 }
 
 func (m Model) updateFilterManage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "q":
 		return m, tea.Quit
 
 	case "esc":
@@ -220,8 +228,10 @@ func (m Model) updateFilterManage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateFilterAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c":
-		return m, tea.Quit
+	case "q":
+		// In filter add screen, 'q' should type 'q', not quit
+		// Only ctrl+c quits (handled globally)
+		break
 
 	case "esc":
 		m.screen = screenFilterManage
@@ -253,7 +263,9 @@ func (m Model) updateFilterAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.newFilterType = filter.TypeRemove
 			}
+			return m, nil
 		}
+		// If not on type selector, let textinput handle left/right
 
 	case "enter":
 		name := strings.TrimSpace(m.newFilterName.Value())
@@ -268,8 +280,10 @@ func (m Model) updateFilterAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		return m, nil
 	}
 
+	// Let the focused input handle the key
 	var cmd tea.Cmd
 	if m.filterInputFocus == 0 {
 		m.newFilterName, cmd = m.newFilterName.Update(msg)
@@ -281,7 +295,7 @@ func (m Model) updateFilterAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "q":
 		return m, tea.Quit
 
 	case "enter", "esc":
