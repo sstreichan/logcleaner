@@ -47,11 +47,11 @@ type Model struct {
 	filterInputFocus int // 0=name, 1=pattern, 2=type
 
 	// Processing
-	processing    bool
-	progressLines int
+	processing       bool
+	progressLines    int
 	progressFiltered int
-	stats         *cleaner.Stats
-	err           error
+	stats            *cleaner.Stats
+	err              error
 
 	width  int
 	height int
@@ -138,11 +138,14 @@ func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		currentValue := m.fileInput.Value()
 		completion := m.autocomplete.Complete(currentValue)
 		
-		// Only update if completion is different
-		if completion != "" && completion != currentValue {
-			m.fileInput.SetValue(completion)
-			// Move cursor to end of completed text
-			m.fileInput.SetCursor(len(completion))
+		// Always update if completion is different, even if it's the same
+		// This triggers the display of suggestions
+		if completion != "" {
+			if completion != currentValue {
+				m.fileInput.SetValue(completion)
+				m.fileInput.SetCursor(len(completion))
+			}
+			// Force a re-render to show suggestions even if value didn't change
 		}
 		return m, nil
 
@@ -329,7 +332,7 @@ func (m Model) fileSelectView() string {
 	content.WriteString(m.fileInput.View())
 	content.WriteString("\n\n")
 
-	// Show file validation or autocomplete hints
+	// Show file validation
 	if m.fileInput.Value() != "" {
 		if _, err := os.Stat(m.fileInput.Value()); err != nil {
 			content.WriteString(errorStyle.Render("⚠ File not found"))
@@ -340,17 +343,35 @@ func (m Model) fileSelectView() string {
 		}
 	}
 
-	// Show autocomplete suggestions if available
+	// Show autocomplete suggestions
 	matches := m.autocomplete.GetLastMatches()
-	if len(matches) > 1 && len(matches) <= 5 {
+	if len(matches) > 0 {
 		content.WriteString("\n")
-		content.WriteString(dimStyle.Render("Suggestions:"))
+		
+		// Show how many matches there are
+		if len(matches) == 1 {
+			content.WriteString(dimStyle.Render("1 match:"))
+		} else {
+			content.WriteString(dimStyle.Render(fmt.Sprintf("%d matches:", len(matches))))
+		}
 		content.WriteString("\n")
+		
+		// Display up to 10 suggestions
+		maxDisplay := 10
 		for i, match := range matches {
-			if i >= 5 {
+			if i >= maxDisplay {
+				content.WriteString(dimStyle.Render(fmt.Sprintf("  ... and %d more", len(matches)-maxDisplay)))
+				content.WriteString("\n")
 				break
 			}
-			content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", filepath.Base(match))))
+			
+			// Show directory indicator
+			displayName := filepath.Base(match)
+			if strings.HasSuffix(match, string(filepath.Separator)) {
+				displayName = displayName[:len(displayName)-1] + "/"
+			}
+			
+			content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", displayName)))
 			content.WriteString("\n")
 		}
 	}
