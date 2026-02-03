@@ -3,13 +3,14 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestComplete_EmptyInput(t *testing.T) {
 	a := NewAutocomplete()
 	result := a.Complete("")
-	
+
 	if result == "" {
 		t.Error("Expected non-empty result for empty input")
 	}
@@ -17,7 +18,7 @@ func TestComplete_EmptyInput(t *testing.T) {
 
 func TestComplete_SingleMatch(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Create a unique file
 	testFile := filepath.Join(tempDir, "unique_test_file.log")
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {

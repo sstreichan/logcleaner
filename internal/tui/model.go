@@ -135,10 +135,16 @@ func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "tab":
-		completion := m.autocomplete.Complete(m.fileInput.Value())
-		if completion != "" {
+		currentValue := m.fileInput.Value()
+		completion := m.autocomplete.Complete(currentValue)
+		
+		// Only update if completion is different
+		if completion != "" && completion != currentValue {
 			m.fileInput.SetValue(completion)
+			// Move cursor to end of completed text
+			m.fileInput.SetCursor(len(completion))
 		}
+		return m, nil
 
 	case "enter":
 		if m.fileInput.Value() != "" {
@@ -323,9 +329,28 @@ func (m Model) fileSelectView() string {
 	content.WriteString(m.fileInput.View())
 	content.WriteString("\n\n")
 
+	// Show file validation or autocomplete hints
 	if m.fileInput.Value() != "" {
 		if _, err := os.Stat(m.fileInput.Value()); err != nil {
 			content.WriteString(errorStyle.Render("⚠ File not found"))
+			content.WriteString("\n")
+		} else {
+			content.WriteString(infoStyle.Render("✓ File exists"))
+			content.WriteString("\n")
+		}
+	}
+
+	// Show autocomplete suggestions if available
+	matches := m.autocomplete.GetLastMatches()
+	if len(matches) > 1 && len(matches) <= 5 {
+		content.WriteString("\n")
+		content.WriteString(dimStyle.Render("Suggestions:"))
+		content.WriteString("\n")
+		for i, match := range matches {
+			if i >= 5 {
+				break
+			}
+			content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", filepath.Base(match))))
 			content.WriteString("\n")
 		}
 	}
