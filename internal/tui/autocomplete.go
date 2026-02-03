@@ -9,6 +9,7 @@ import (
 type Autocomplete struct {
 	cache        map[string][]string
 	lastMatches  []string
+	lastInput    string
 	currentIndex int
 }
 
@@ -16,6 +17,7 @@ func NewAutocomplete() *Autocomplete {
 	return &Autocomplete{
 		cache:        make(map[string][]string),
 		lastMatches:  []string{},
+		lastInput:    "",
 		currentIndex: 0,
 	}
 }
@@ -42,20 +44,33 @@ func (a *Autocomplete) Complete(input string) string {
 	}
 
 	if len(matches) == 1 {
-		// Single match - return it
+		// Single match - return it and reset
+		a.lastMatches = matches
+		a.lastInput = input
+		a.currentIndex = 0
 		return matches[0]
 	}
 
-	// Multiple matches - return common prefix
-	commonPrefix := a.findCommonPrefix(matches)
-	if commonPrefix != input {
-		return commonPrefix
+	// Multiple matches - cycle through them
+	// If input changed, reset to first match
+	if input != a.lastInput {
+		a.lastMatches = matches
+		a.lastInput = input
+		a.currentIndex = 0
+		
+		// Try common prefix first
+		commonPrefix := a.findCommonPrefix(matches)
+		if commonPrefix != input {
+			return commonPrefix
+		}
+		
+		// No common prefix, return first match
+		return matches[0]
 	}
 
-	// No additional completion possible, return input
-	// Store matches for potential future use (e.g., showing suggestions)
-	a.lastMatches = matches
-	return input
+	// Same input as last time - cycle to next match
+	a.currentIndex = (a.currentIndex + 1) % len(matches)
+	return matches[a.currentIndex]
 }
 
 // parseInput splits input into directory and base name, handling special cases
@@ -149,6 +164,18 @@ func (a *Autocomplete) findCommonPrefix(matches []string) string {
 // Useful for displaying suggestions to the user
 func (a *Autocomplete) GetLastMatches() []string {
 	return a.lastMatches
+}
+
+// GetCurrentIndex returns the currently selected match index
+func (a *Autocomplete) GetCurrentIndex() int {
+	return a.currentIndex
+}
+
+// Reset clears the autocomplete state
+func (a *Autocomplete) Reset() {
+	a.lastMatches = []string{}
+	a.lastInput = ""
+	a.currentIndex = 0
 }
 
 // commonPrefix returns the common prefix of two strings

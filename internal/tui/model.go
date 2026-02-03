@@ -124,9 +124,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	var cmd tea.Cmd
-	m.fileInput, cmd = m.fileInput.Update(msg)
-	return m, cmd
+	// Update file input for any other key that's not tab
+	if m.screen == screenFileSelect {
+		var cmd tea.Cmd
+		m.fileInput, cmd = m.fileInput.Update(msg)
+		return m, cmd
+	}
+
+	return m, nil
 }
 
 func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -138,14 +143,9 @@ func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		currentValue := m.fileInput.Value()
 		completion := m.autocomplete.Complete(currentValue)
 		
-		// Always update if completion is different, even if it's the same
-		// This triggers the display of suggestions
-		if completion != "" {
-			if completion != currentValue {
-				m.fileInput.SetValue(completion)
-				m.fileInput.SetCursor(len(completion))
-			}
-			// Force a re-render to show suggestions even if value didn't change
+		if completion != "" && completion != currentValue {
+			m.fileInput.SetValue(completion)
+			m.fileInput.SetCursor(len(completion))
 		}
 		return m, nil
 
@@ -154,13 +154,19 @@ func (m Model) updateFileSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if _, err := os.Stat(m.fileInput.Value()); err == nil {
 				m.filePath = m.fileInput.Value()
 				m.screen = screenFilterManage
+				// Reset autocomplete when moving to next screen
+				m.autocomplete.Reset()
 			}
 		}
+		return m, nil
+
+	default:
+		// Reset autocomplete when user types something
+		// This will be handled after the input is updated
 	}
 
-	var cmd tea.Cmd
-	m.fileInput, cmd = m.fileInput.Update(msg)
-	return m, cmd
+	// Don't update input here - it's done in the main Update function
+	return m, nil
 }
 
 func (m Model) updateFilterManage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -283,6 +289,7 @@ func (m Model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.fileInput.SetValue("")
 		m.stats = nil
 		m.err = nil
+		m.autocomplete.Reset()
 		return m, nil
 	}
 
@@ -352,12 +359,15 @@ func (m Model) fileSelectView() string {
 		if len(matches) == 1 {
 			content.WriteString(dimStyle.Render("1 match:"))
 		} else {
-			content.WriteString(dimStyle.Render(fmt.Sprintf("%d matches:", len(matches))))
+			currentIdx := m.autocomplete.GetCurrentIndex()
+			content.WriteString(dimStyle.Render(fmt.Sprintf("%d matches (showing %d/%d):", len(matches), currentIdx+1, len(matches))))
 		}
 		content.WriteString("\n")
 		
 		// Display up to 10 suggestions
 		maxDisplay := 10
+		currentIdx := m.autocomplete.GetCurrentIndex()
+		
 		for i, match := range matches {
 			if i >= maxDisplay {
 				content.WriteString(dimStyle.Render(fmt.Sprintf("  ... and %d more", len(matches)-maxDisplay)))
@@ -384,12 +394,17 @@ func (m Model) fileSelectView() string {
 				displayName = match
 			}
 			
-			content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", displayName)))
+			// Highlight the currently selected match
+			if i == currentIdx {
+				content.WriteString(selectedItemStyle.Render(fmt.Sprintf("→ %s", displayName)))
+			} else {
+				content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", displayName)))
+			}
 			content.WriteString("\n")
 		}
 	}
 
-	help := helpStyle.Render("Tab: autocomplete | Enter: continue | Ctrl+C: quit")
+	help := helpStyle.Render("Tab: cycle completions | Enter: continue | Ctrl+C: quit")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, content.String(), help)
 }
