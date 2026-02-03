@@ -365,10 +365,23 @@ func (m Model) fileSelectView() string {
 				break
 			}
 			
-			// Show directory indicator
-			displayName := filepath.Base(match)
+			// Extract proper display name
+			displayName := match
+			
+			// For directories with trailing separator, remove it to get the name
 			if strings.HasSuffix(match, string(filepath.Separator)) {
-				displayName = displayName[:len(displayName)-1] + "/"
+				// Remove trailing separator
+				cleanPath := strings.TrimSuffix(match, string(filepath.Separator))
+				// Get the directory name
+				displayName = filepath.Base(cleanPath) + "/"
+			} else {
+				// For files, just use the base name
+				displayName = filepath.Base(match)
+			}
+			
+			// If displayName is still empty or just "/", show the full path
+			if displayName == "" || displayName == "/" || displayName == "./" {
+				displayName = match
 			}
 			
 			content.WriteString(dimStyle.Render(fmt.Sprintf("  %s", displayName)))
