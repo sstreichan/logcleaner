@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Remove Errors",
+    "pattern": "^ERROR|^FATAL",
+    "type": "remove"
+  },
+  {
+    "name": "Remove Debug",
+    "pattern": "^DEBUG|^TRACE",
+    "type": "remove"
+  },
+  {
+    "name": "Keep Important",
+    "pattern": "ERROR|WARN|CRITICAL",
+    "type": "keep"
+  },
+  {
+    "name": "Remove Timestamps",
+    "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}",
+    "type": "remove"
+  },
+  {
+    "name": "Keep HTTP Errors",
+    "pattern": "HTTP/\\d\\.\\d\" [45]\\d{2}",
+    "type": "keep"
+  }
+]
